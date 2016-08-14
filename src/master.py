@@ -21,12 +21,13 @@ p = configargparse.getArgParser()
 g = p.add_argument_group('main args')
 g.add("-R", "--reference-genome", help="b37 .fa genome reference file", required=True)
 g.add("-E", "--exac-sites-vcf",  help="ExAC sites vcf file. If specified, a clinvar table with extra ExAC fields will also be created.")
+g.add("-V", "--version",  help="Human genome Assembly to use. Default = 37 (for GRCh37). Specify 38 to use the current genome version (GRCh38).")
 
 pypez.init_command_line_args()
 args = p.parse_args()
 
 if not os.path.isfile(args.reference_genome):
-    p.error("genome reference: file not found: %s" % args.reference_genome)
+    p.error("genome reference: file not found: %d" % args.reference_genome)
 reference_genome = args.reference_genome
 
 if args.exac_sites_vcf:
@@ -34,6 +35,12 @@ if args.exac_sites_vcf:
 	p.error("ExAC sites vcf: file not found: %s" % args.exac_sites_vcf)
     if not os.path.isfile(args.exac_sites_vcf + ".tbi"):
         p.error("ExAC sites vcf: tabix index not found: %{s}.tbi" % args.exac_sites_vcf)
+
+if args.version:
+    if (args.version != "37" and args.version != "38"):
+        p.error("Unrecognised genome version: %d" % args.version)
+else:
+    args.version = "37"
 
 def get_remote_file_changed_time(ftp_host, ftp_path):
     """Returns time modified in seconds since the epoch"""
@@ -62,8 +69,8 @@ jr.run()
 
 job = pypez.Job()
 
-# extract the GRCh37 coordinates, mutant allele, MeasureSet ID and PubMed IDs from it. This currently takes about 20 minutes.
-job.add("python -u IN:parse_clinvar_xml.py -x IN:ClinVarFullRelease_00-latest.xml.gz -o OUT:clinvar_table_raw.tsv")
+# extract the GRCh37/8 coordinates, mutant allele, MeasureSet ID and PubMed IDs from it. This currently takes about 20 minutes.
+job.add("python -u IN:parse_clinvar_xml.py -x IN:ClinVarFullRelease_00-latest.xml.gz -o OUT:clinvar_table_raw.tsv -v %s" % args.version)
 
 # sort the table
 job.add("(cat IN:clinvar_table_raw.tsv | head -1 > OUT:clinvar_table_sorted.tsv ) && "  # header row
@@ -79,7 +86,7 @@ job.add("wget -N https://raw.githubusercontent.com/ericminikel/minimal_represent
 job.add("python -u normalize.py -R IN:%(reference_genome)s < IN:clinvar_table_dedup.tsv > OUT:clinvar_table_dedup_normalized.tsv" % locals())
 
 # join information from the tab-delimited summary to the normalized genomic coordinates
-job.add("Rscript IN:join_data.R", input_filenames=['clinvar_table_dedup_normalized.tsv'], output_filenames=['clinvar_combined.tsv'])
+job.add("Rscript IN:join_data.R GRCh%s" % args.version, input_filenames=['clinvar_table_dedup_normalized.tsv'], output_filenames=['clinvar_combined.tsv'])
 
 # now sort again by genomic coordinates (because R's merge function ruins this)
 job.add("(cat IN:clinvar_combined.tsv | head -1 > OUT:clinvar_combined_sorted.tsv ) && " + # header row

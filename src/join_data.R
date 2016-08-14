@@ -2,6 +2,14 @@
 
 options(stringsAsFactors=F)
 
+args = commandArgs(trailingOnly=TRUE)
+genome = 'GRCh37'
+if (length(args) > 1) {
+  stop("No more than one argument expected.n", call.=FALSE)
+}else if (length(args) > 0){
+    genome <- args[1]
+}
+
 # load what we've extracted from the XML so far
 xml_extract = read.table('clinvar_table_dedup_normalized.tsv',sep='\t',comment.char='',quote='',header=T)
 
@@ -11,7 +19,7 @@ txt_download = read.table('variant_summary.txt.gz',sep='\t',comment.char='',quot
 # subset the tab-delimited summary to desired rows and cols
 colnames(txt_download) = gsub('\\.','_',tolower(colnames(txt_download)))
 desired_columns = c('variantid','genesymbol','clinicalsignificance','reviewstatus','hgvs_c__','hgvs_p__')
-txt_extract = subset(txt_download, assembly == 'GRCh37', select=desired_columns)
+txt_extract = subset(txt_download, assembly == genome, select=desired_columns)
 colnames(txt_extract) = c('measureset_id','symbol','clinical_significance','review_status','hgvs_c','hgvs_p')
 
 # join on measureset_id

@@ -14,29 +14,30 @@ import xml.etree.ElementTree as ET
 mentions_pubmed_regex = '(?:PubMed|PMID)(.*)' # group(1) will be all the text after the word PubMed or PMID
 extract_pubmed_id_regex = '[^0-9]+([0-9]+)[^0-9](.*)' # group(1) will be the first PubMed ID, group(2) will be all remaining text
 
-def parse_clinvar_tree(handle,dest=sys.stdout,verbose=True,mode='collapsed'):
+def parse_clinvar_tree(handle,dest=sys.stdout,verbose=True,mode='collapsed',version='37'):
     # print a header row
     dest.write(('\t'.join( ['chrom', 'pos', 'ref', 'alt', 'mut', 'measureset_id', 'all_submitters', 'all_traits', 'all_pmids'] ) + '\n').encode('utf-8'))
     counter = 0
+    assembly = "GRCh" + version
     skipped_counter = defaultdict(int)
     for event, elem in ET.iterparse(handle):
         if event == 'end' and elem.tag == 'ClinVarSet':
-            # find the GRCh37 VCF representation
+            # find the GRCh37/8 VCF representation
             sequence_locations = elem.findall('.//SequenceLocation')
-            grch37 = None
+            seqloc = None
             for sequence_location in sequence_locations:
-                if sequence_location.attrib.get('Assembly') == 'GRCh37':
+                if sequence_location.attrib.get('Assembly') == assembly:
                     if all(entry is not None for entry in [sequence_location.attrib.get(key) for key in ['referenceAllele','alternateAllele','start','Chr']]):
-                        grch37 = sequence_location
-            if grch37 is None:
+                        seqloc = sequence_location
+            if seqloc is None:
                 skipped_counter['missing SequenceLocation'] += 1
                 elem.clear()
                 continue # don't bother with variants that don't have a VCF location
             else:
-                chrom = grch37.attrib['Chr']
-                pos = grch37.attrib['start']
-                ref = grch37.attrib['referenceAllele']
-                alt = grch37.attrib['alternateAllele']
+                chrom = seqloc.attrib['Chr']
+                pos = seqloc.attrib['start']
+                ref = seqloc.attrib['referenceAllele']
+                alt = seqloc.attrib['alternateAllele']
             measureset = elem.findall('.//MeasureSet')
             if measureset is None:
                 skipped_counter['missing MeasureSet'] += 1
@@ -116,5 +117,6 @@ if __name__ == '__main__':
                        type=str, help='Path to the ClinVar XML dump')
     parser.add_argument('-o', '--out', nargs='?', type=argparse.FileType('w'),
                        default=sys.stdout)
+    parser.add_argument('-v', '--version', nargs='?', default='37')
     args = parser.parse_args()
-    parse_clinvar_tree(get_handle(args.xml_path),dest=args.out)
+    parse_clinvar_tree(get_handle(args.xml_path),dest=args.out,version=args.version)
